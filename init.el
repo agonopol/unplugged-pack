@@ -5,7 +5,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (global-linum-mode) ;;; turn on line numbers
-(global-git-gutter-mode -1) ;;; turn off git gutter, hides line numbers
+(global-git-gutter-mode 1) ;;; turn off git gutter, hides line numbers
 (global-auto-revert-mode 1) ;;; allow git pulls/reverts to easily update buffers
 (put 'narrow-to-region 'disabled nil) ;; allow me to narrow-to-region
 
@@ -20,23 +20,14 @@
 
 (setq-default fill-column 90) ;;; I like my right margin at 90
 
-;; Develop in unplugged-pack snippets dir
-;; use snippets from emacs-live
-(setq yas/root-directory '("~/.emacs.d/local/unplugged-pack/snippets"
-                           "~/.emacs.d/etc/snippets"))
-
-;; Map `yas/load-directory' to every element
-(mapc 'yas/load-directory yas/root-directory)
-
 (dolist (x '(scheme emacs-lisp lisp clojure)) ;;; disable rainbow-delimiters
   (remove-hook (intern (concat (symbol-name x) "-mode-hook")) 'rainbow-delimiters-mode))
 
 (defun reset-nrepl-connection-to-default ()
-	(let* ((project-root (locate-dominating-file (file-name-directory (buffer-file-name)) "project.clj")))
-		(let ((connection "*nrepl-connection localhost*"))
+	(let ((connection "*nrepl-connection localhost*"))
   		(if (get-buffer connection)
       		(nrepl-make-repl-connection-default (get-buffer connection))
-    		(message (concat "*** PROBABLE ERROR *** " connection " could not be found"))))))
+    		(message (concat "*** PROBABLE ERROR *** " connection " could not be found")))))
 				
 
 (defun load-current-buffer-to-all-nrepls ()
@@ -418,13 +409,12 @@
   	(let ((fname (concat "~/tmp/emacs/" project-name (format "/%s" buffer))))
     	(when (file-exists-p fname)
       		(delete-file fname))
-    		(write-file fname))
-  		  (cd project-root)
+    	(write-file fname))
+  		(cd project-root)
   	(bury-buffer))
 		
 (defun switch-expectations-repl (project-root project-name)
-	(message "Starting expectations repl...")
-	(remove-hook 'nrepl-connected-hook (first nrepl-connected-hook ))
+	(remove-hook 'nrepl-connected-hook (first (filter (lambda (x) (eq (type-of x) 'cons)) nrepl-connected-hook)))
 	(switch-repl project-root project-name (format "*nrepl-server %s*<2>" project-name) "*nrepl-server expectations*"))
 
 (defun load-project-env (project-root)
@@ -434,7 +424,7 @@
 			
 				
 (defun switch-project (project-root)
-	(interactive (list (ido-read-directory-name "Project Root: " (locate-dominating-file default-directory "project.clj"))))
+	(interactive (list (read-directory-name "Project Root: " (locate-dominating-file default-directory "project.clj"))))
 	(let ((project-name (file-name-nondirectory (directory-file-name project-root))))
 		(dolist (x (find-buffers "*nrepl-server"))
 			(mark-buffer-umodified x))
@@ -456,6 +446,10 @@
 
 (global-set-key (kbd "C-c C-x C-e") 'start-server)
 
+(defadvice save-buffers-kill-emacs (before no-y-or-n activate)
+	(dolist (x (find-buffers "*nrepl-server"))
+		(mark-buffer-umodified x)))
+		
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; layout shortcuts ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -649,12 +643,24 @@
   (interactive)
   (switch-to-buffer-other-window "*grep*"))
 
+(defun live-filter (condp lst)
+(delq nil
+      (mapcar (lambda (x) (when (funcall condp x) x)) lst)))
+
+(defun live-list-buffer-names ()
+(live-filter 'identity (mapcar (lambda (el) (buffer-name el)) (buffer-list))))
+
+
+(defun filter (condp lst)
+    (delq nil
+          (mapcar (lambda (x) (and (funcall condp x) x)) lst)))
+		 
 (defun find-buffer (buffer)
-  (first 
-	  (find-buffers buffer)))
+(first 
+  (find-buffers buffer)))
 
 (defun find-buffers (buffer)
-	(filter (lambda (b) (string-match buffer b)) (live-list-buffer-names)))
+  	(filter (lambda (b) (string-match buffer b)) (live-list-buffer-names))) 
 		  
 (defun filter (condp lst)
       (delq nil
